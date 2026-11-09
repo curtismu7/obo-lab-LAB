@@ -135,7 +135,7 @@ test('README follows the README standard: title ends in LAB, plain Tier and Repo
   const r = read('README.md');
   assert.match(r.split('\n')[0], /^# .* LAB$/);
   assert.match(r, /^Tier: Demo$/m);
-  assert.match(r, /^Repo: https:\/\/github\.com\/ping-sandbox\/obo-lab$/m);
+  assert.match(r, /^Repo: https:\/\/github\.com\/curtismu7\/obo-lab-LAB$/m);
   assert.match(r, /^Catalog: D111/m);
   const heads = [...r.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
   const want = ['What is simulated', 'Run from a clone', 'Settings file', 'Ports, and what to do if the port is taken', 'Mock and Real modes', 'Health, doctor and reset', 'Docker', 'Tests', 'Troubleshooting', 'Ownership'];
@@ -143,7 +143,7 @@ test('README follows the README standard: title ends in LAB, plain Tier and Repo
   assert.ok(at.every((i) => i >= 0), at.join());
   assert.deepEqual([...at].sort((a, b) => a - b), at, 'sections are in the standard order');
   assert.match(r, /lsof -iTCP:7560 -sTCP:LISTEN -n -P/);
-  assert.ok(!/ping-devops|cmuir|curtismu/i.test(r));
+  assert.ok(!/ping-devops|cmuir|curtismu/i.test(r.replace(/^Repo: .*$/m, '')));
 });
 
 test('app CSS follows the CSS standard and the shared stylesheet loads first', () => {

@@ -1,7 +1,7 @@
 # OBO Delegation Inspector LAB
 
 Tier: Demo
-Repo: https://github.com/ping-sandbox/obo-lab
+Repo: https://github.com/curtismu7/obo-lab-LAB
 Catalog: D111
 
 An AI agent acts for a signed-in person, but it must never hold that person's token, and every downstream call has to say who the person is and which agent acted. Run the seven steps: sign-in token → agent identity (client credentials) → RFC 8693 exchange → delegated token → downstream accepts it → downstream refuses the person's own token → no token reached the model.
