@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import { getCatalog, getInfo, requestModeSwitch, resetServer, runObo, revokeAgent } from "./lib/api.js";
 import ModeToggle from "./components/ModeToggle.jsx";
 import ShelfLink from "./components/ShelfLink.jsx";
+// Opened from Customer Agent LAB (UC16, UC-OBO and UC44 route here): strip + header Back only. This lab is one fixed OBO run with no
+// scenario or vertical to preselect, so nothing else changes.
+import ReturnLink from "./return-link/ReturnLink.jsx";
 import RunTab from "./tabs/RunTab.jsx";
 
 export const TABS = [["run", "Run"], ["wire", "Wire"]];
@@ -85,9 +88,11 @@ export default function App() {
       <a className="skip" href="#main">Skip to content</a>
       <header>
         <p className="banner" data-testid="banner">{banner}</p>
+        <ReturnLink app="obo-lab" />
         <div className="head">
           <h1 className="head__title">OBO Delegation Inspector LAB</h1>
           <div className="head__tools">
+            <ReturnLink app="obo-lab" variant="header" />
             <ShelfLink />
             <ModeToggle info={info} onSelect={onMode} />
             <label className="inline">Theme
