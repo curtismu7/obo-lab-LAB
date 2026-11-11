@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { getCatalog, getInfo, requestModeSwitch, resetServer, runObo, revokeAgent } from "./lib/api.js";
-import ModeToggle from "./components/ModeToggle.jsx";
 import ShelfLink from "./components/ShelfLink.jsx";
 // Opened from Customer Agent LAB (UC16, UC-OBO and UC44 route here): strip + header Back only. This lab is one fixed OBO run with no
 // scenario or vertical to preselect, so nothing else changes.
 import ReturnLink from "./return-link/ReturnLink.jsx";
 import RunTab from "./tabs/RunTab.jsx";
+import TopMenu from "./top-menu/TopMenu.jsx";
 
 export const TABS = [["run", "Run"], ["wire", "Wire"]];
 export const FALLBACK_BANNER = "MOCK mode. SIMULATED: in-process mock issuer, mock exchanger and mock downstream. No tenant, no outbound network.";
@@ -93,17 +93,16 @@ export default function App() {
           <h1 className="head__title">OBO Delegation Inspector LAB</h1>
           <div className="head__tools">
             <ReturnLink app="obo-lab" variant="header" />
-            <ShelfLink />
-            <ModeToggle info={info} onSelect={onMode} />
-            <label className="inline">Theme
-              <select value={theme} onChange={(e) => { setTheme(e.target.value); write("obol.theme", e.target.value); }} data-testid="theme">
-                <option value="system">Auto</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
-            <button type="button" className="btn" aria-pressed={present} onClick={() => setPresent((v) => { write("obol.present", v ? "0" : "1"); return !v; })}>Present</button>
-            <button type="button" className="btn" onClick={async () => { await resetServer(); setRun(null); setAnnounce("Reset."); }}>Reset</button>
+            <TopMenu
+              mode={{ value: info?.source === "real" ? "real" : "mock", onChange: onMode, realAvailable: info ? info.realAvailable === true : null, realHint: info && info.realAvailable !== true ? info.realReason : undefined }}
+              theme={{ value: theme === "system" ? "auto" : theme, onChange: (v) => { setTheme(v === "auto" ? "system" : v); write("obol.theme", v === "auto" ? "system" : v); } }}
+              present={{ active: present, onToggle: () => setPresent((v) => { write("obol.present", v ? "0" : "1"); return !v; }) }}
+              help={{ href: "https://github.com/curtismu7/obo-lab-LAB#readme" }}
+              version={info?.version || null}
+              onReset={async () => { await resetServer(); setRun(null); setAnnounce("Reset."); }}
+            >
+              <ShelfLink />
+            </TopMenu>
           </div>
         </div>
         <nav aria-label="Tabs" className="tabs">

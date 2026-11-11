@@ -43,13 +43,12 @@ test("run renders the seven steps, the diff table, and the downstream refusal", 
   expect(screen.getByTestId("delta")).toBeTruthy();
 });
 
-test("rule 19: the toggle renders both buttons; Real disabled with how-to when unconfigured", async () => {
+test("rule 19: the mode select shows Mock; Real disabled with how-to when unconfigured", async () => {
   render(<App />);
   await screen.findByTestId("banner");
-  const real = screen.getByTestId("mode-real");
-  expect(real).toBeDisabled();
-  expect(real.getAttribute("title")).toMatch(/PINGONE/);
-  expect(screen.getByTestId("mode-mock").getAttribute("aria-pressed")).toBe("true");
+  const select = screen.getByTestId("mode-select");
+  expect(select).toHaveValue("mock");
+  expect(screen.getByRole("option", { name: "Real" })).toBeDisabled();
 });
 
 test("a refused run (revoked agent) shows the step and the reason", async () => {
