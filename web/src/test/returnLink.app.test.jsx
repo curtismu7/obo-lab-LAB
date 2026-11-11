@@ -62,3 +62,8 @@ describe("return link", () => {
     expect(returnLinkFor("obo-lab").href).toBe("http://127.0.0.1:5603/?returned=obo-lab&uc=UC44");
   });
 });
+
+  it("?from=ai-demo-standalone: strip names AI Demo Standalone, Back goes to /ai-demo-standalone/ under the proxy", () => {
+    window.history.replaceState(null, "", "/obo-lab/?from=ai-demo-standalone&uc=UC12");
+    expect(returnLinkFor("obo-lab").href).toBe("/ai-demo-standalone/?returned=obo-lab&uc=UC12");
+  });
