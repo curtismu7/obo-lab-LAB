@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { hostCheck, sameOriginWrites } from './safety.js';
-import { createHealth } from './health.js';
+import { createHealth, DEMO } from './health.js';
 import { createWorld, personaOf, agentOf, exchangerOf, downstreamOf, jwtDecode } from './obo.js';
 import { createMode, MODES } from './mode.js';
 import { DIAGRAM_NAMES, loadDiagram } from './diagramData.js';
@@ -31,7 +31,7 @@ export function createApp({ health = createHealth(), mode = createMode(), world 
   api.use('/health', health.router);
   api.get('/shelf', (_req, res) => { res.set('Cache-Control', 'no-store'); res.json(shelfInfo(env)); });
 
-  api.get('/info', (_req, res) => { res.set('Cache-Control', 'no-store'); res.json({ ...mode.info(), version: health.DEMO.version || null, banner: BANNER(mode.source()), epoch: world.state.runs.length }); });
+  api.get('/info', (_req, res) => { res.set('Cache-Control', 'no-store'); res.json({ ...mode.info(), version: DEMO.version || null, banner: BANNER(mode.source()), epoch: world.state.runs.length }); });
   // Rule 19: POST /api/mode with exactly {"source": "mock"|"real"}. Real unconfigured -> 409 with the how-to.
   api.post('/mode', (req, res) => {
     const b = req.body;
