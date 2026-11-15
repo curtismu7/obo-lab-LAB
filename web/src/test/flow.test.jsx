@@ -1,9 +1,10 @@
-import { test, expect, vi } from "vitest";
+import { test, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import App, { FALLBACK_BANNER } from "../App.jsx";
 import { runObo, requestModeSwitch } from "../lib/api.js";
+import { setJsonView } from "../components/JsonPane.jsx";
 
 vi.mock("../lib/api.js", () => ({
   requestModeSwitch: vi.fn(async (source) => ({ source, realAvailable: false, realReason: "Set PINGONE_* in ~/Development/.env", banner: "B" })),
@@ -20,6 +21,8 @@ vi.mock("../lib/api.js", () => ({
   revokeAgent: vi.fn(async () => ({ ok: true })),
   decodeToken: vi.fn(),
 }));
+
+beforeEach(() => { window.location.hash = ""; setJsonView("form"); });
 
 const GOOD_RUN = {
   ok: true, source: "mock",
@@ -64,4 +67,38 @@ test("a refused run (revoked agent) shows the step and the reason", async () => 
 
 test("fallback banner mentions simulation", async () => {
   expect(FALLBACK_BANNER).toMatch(/SIMULATED/i);
+});
+
+test("Wire tab: each token's claims go through the shared JsonPane (Form, then the exact JSON), no scroll cap", async () => {
+  runObo.mockResolvedValueOnce(GOOD_RUN);
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByTestId("banner");
+  await user.click(screen.getByTestId("obo-run"));
+  await waitFor(() => expect(screen.getByTestId("steps")).toBeTruthy());
+  await user.click(screen.getByRole("link", { name: "Wire" }));
+  const panes = await screen.findAllByTestId("wire-json");
+  expect(panes).toHaveLength(3);
+  expect(panes[2]).toHaveTextContent("personal-agent");          // Form view: label + value per field
+  expect(panes[2].tagName).toBe("DIV");
+  await user.click(screen.getAllByRole("button", { name: "JSON" })[2]);
+  const raw = screen.getAllByTestId("wire-json")[2];
+  expect(raw.tagName).toBe("PRE");
+  expect(raw).toHaveTextContent('"sub": "user.0042"');            // the JSON text
+  expect(raw).toHaveTextContent('"scope": "checking:read transfer:write"');
+  expect(raw.style.maxHeight).toBe("");
+  expect(raw.style.overflow).toBe("");
+});
+
+test("Wire tab: a refused run names the tokens that were never minted instead of printing undefined", async () => {
+  runObo.mockResolvedValueOnce({ ok: false, failedStep: 2, error: "the agent's client is revoked; step 2 (client credentials) is refused with invalid_client" });
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByTestId("banner");
+  await user.click(screen.getByTestId("obo-run"));
+  await waitFor(() => expect(screen.getByTestId("run-refused")).toBeTruthy());
+  await user.click(screen.getByRole("link", { name: "Wire" }));
+  await waitFor(() => expect(screen.getAllByText(/Not minted/)).toHaveLength(3));
+  expect(screen.queryByTestId("wire-json")).toBeNull();
+  expect(document.body).not.toHaveTextContent("undefined");
 });

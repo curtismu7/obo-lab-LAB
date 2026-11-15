@@ -133,4 +133,3 @@ form.stack button[type="submit"] { justify-self: start; margin-top: 4px; }
 .readout__col p { margin: 6px 0; }
 @media (max-width: 600px) { .head__tools { gap: 10px; } }
 .steps li { margin: 4px 0 4px 0; padding-left: 4px; }
-.wire { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font-size: 13px; overflow: auto; }
