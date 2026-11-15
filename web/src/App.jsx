@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { getCatalog, getInfo, requestModeSwitch, resetServer, runObo, revokeAgent } from "./lib/api.js";
 import ShelfLink from "./components/ShelfLink.jsx";
+import VerifyMark from "./components/VerifyMark.jsx";
 // Opened from Customer Agent LAB (UC16, UC-OBO and UC44 route here): strip + header Back only. This lab is one fixed OBO run with no
 // scenario or vertical to preselect, so nothing else changes.
 import ReturnLink from "./return-link/ReturnLink.jsx";
@@ -102,6 +103,7 @@ export default function App() {
               onReset={async () => { await resetServer(); setRun(null); setAnnounce("Reset."); }}
             >
               <ShelfLink />
+              <VerifyMark id="obo-lab" />
             </TopMenu>
           </div>
         </div>
