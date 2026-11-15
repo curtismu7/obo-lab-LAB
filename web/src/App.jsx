@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { getCatalog, getInfo, requestModeSwitch, resetServer, runObo, revokeAgent } from "./lib/api.js";
+import Json from "./components/JsonPane.jsx";
 import ShelfLink from "./components/ShelfLink.jsx";
 import VerifyMark from "./components/VerifyMark.jsx";
 // Opened from Customer Agent LAB (UC16, UC-OBO and UC44 route here): strip + header Back only. This lab is one fixed OBO run with no
@@ -130,7 +131,9 @@ function WireTab({ run }) {
       {[["Inbound (your token)", run.inbound?.claims], ["Actor (agent client credentials)", run.actor?.claims], ["Delegated (the exchange result)", run.delegated?.claims]].map(([label, claims]) => (
         <div key={label} className="card">
           <h4>{label}</h4>
-          <pre className="wire" data-testid="wire-json">{JSON.stringify(claims, null, 2)}</pre>
+          {claims === undefined
+            ? <p className="muted small">Not minted: this run was refused before this token.</p>
+            : <Json value={claims} label={label} testId="wire-json" hot={["sub", "act", "aud", "scope"]} />}
         </div>
       ))}
     </section>
