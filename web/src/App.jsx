@@ -120,7 +120,7 @@ export default function App() {
           : <WireTab run={run} />}
       </main>
       <footer><p className="muted small">Delegation, not impersonation: sub stays the person, act names the agent, aud and scope narrow. Tokens are one input to enforcement — the act claim is what the downstream checks.</p></footer>
-      <div aria-live="polite" className="visually-hidden">{announce}</div>
+      <div aria-live="polite" className="sr-only">{announce}</div>
     </>
   );
 }

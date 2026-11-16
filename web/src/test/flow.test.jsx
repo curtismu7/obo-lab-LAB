@@ -2,6 +2,8 @@ import { test, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
+import fs from "node:fs";
+import path from "node:path";
 import App, { FALLBACK_BANNER } from "../App.jsx";
 import { runObo, requestModeSwitch } from "../lib/api.js";
 import { setJsonView } from "../components/JsonPane.jsx";
@@ -101,4 +103,18 @@ test("Wire tab: a refused run names the tokens that were never minted instead of
   await waitFor(() => expect(screen.getAllByText(/Not minted/)).toHaveLength(3));
   expect(screen.queryByTestId("wire-json")).toBeNull();
   expect(document.body).not.toHaveTextContent("undefined");
+});
+
+test("the live announcement is screen-reader only: it carries the shared sr-only class, which app.css defines", async () => {
+  runObo.mockResolvedValueOnce(GOOD_RUN);
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByTestId("banner");
+  await user.click(screen.getByTestId("obo-run"));
+  const live = await screen.findByText(/^Run passed: downstream 200/);
+  expect(live).toHaveAttribute("aria-live", "polite");
+  expect(live).toHaveClass("sr-only");
+  expect(live).not.toHaveClass("visually-hidden");
+  const css = fs.readFileSync(path.join(process.cwd(), "src", "app.css"), "utf8");
+  expect(css).toMatch(/\.sr-only\s*\{[^}]*clip:/);
 });
