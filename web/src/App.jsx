@@ -77,8 +77,8 @@ export default function App() {
     return (
       <>
         <a className="skip" href="#main">Skip to content</a>
-        <p className="banner">{FALLBACK_BANNER}</p>
         <main className="page" id="main" tabIndex={-1}>
+          <p className="banner">{FALLBACK_BANNER}</p>
           {loadError ? <p className="alert" role="alert">Could not reach the lab server: {loadError}</p> : <p className="muted" role="status">Loading the delegation lab...</p>}
         </main>
       </>
@@ -88,8 +88,6 @@ export default function App() {
   return (
     <>
       <a className="skip" href="#main">Skip to content</a>
-      <p className="banner" data-testid="banner">{banner}</p>
-      <ReturnLink app="obo-lab" />
       <header className="shell-bar">
         <span className="shell-brand">
           <span className="shell-logo" aria-hidden="true">OBO</span>
@@ -115,6 +113,8 @@ export default function App() {
         </TopMenu>
       </header>
       <main className="page" id="main" tabIndex={-1}>
+        <p className="banner" data-testid="banner">{banner}</p>
+        <ReturnLink app="obo-lab" />
         {tab === "run"
           ? <RunTab catalog={catalog} run={run} busy={busy} error={error} onRun={onRun} onRevoke={onRevoke} source={info?.source} />
           : <WireTab run={run} />}
