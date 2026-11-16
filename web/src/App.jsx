@@ -77,8 +77,8 @@ export default function App() {
     return (
       <>
         <a className="skip" href="#main">Skip to content</a>
-        <header><p className="banner">{FALLBACK_BANNER}</p></header>
         <main className="page" id="main" tabIndex={-1}>
+          <p className="banner">{FALLBACK_BANNER}</p>
           {loadError ? <p className="alert" role="alert">Could not reach the lab server: {loadError}</p> : <p className="muted" role="status">Loading the delegation lab...</p>}
         </main>
       </>
@@ -88,31 +88,33 @@ export default function App() {
   return (
     <>
       <a className="skip" href="#main">Skip to content</a>
-      <header>
-        <p className="banner" data-testid="banner">{banner}</p>
-        <ReturnLink app="obo-lab" />
-        <div className="head">
-          <h1 className="head__title">OBO Delegation Inspector LAB</h1>
-          <div className="head__tools">
-            <ReturnLink app="obo-lab" variant="header" />
-            <TopMenu
-              mode={{ value: info?.source === "real" ? "real" : "mock", onChange: onMode, realAvailable: info ? info.realAvailable === true : null, realHint: info && info.realAvailable !== true ? info.realReason : undefined }}
-              theme={{ value: theme === "system" ? "auto" : theme, onChange: (v) => { setTheme(v === "auto" ? "system" : v); write("obol.theme", v === "auto" ? "system" : v); } }}
-              present={{ active: present, onToggle: () => setPresent((v) => { write("obol.present", v ? "0" : "1"); return !v; }) }}
-              help={{ href: "https://github.com/curtismu7/obo-lab-LAB#readme" }}
-              version={info?.version || null}
-              onReset={async () => { await resetServer(); setRun(null); setAnnounce("Reset."); }}
-            >
-              <ShelfLink />
-              <VerifyMark id="obo-lab" />
-            </TopMenu>
-          </div>
-        </div>
-        <nav aria-label="Tabs" className="tabs">
-          {TABS.map(([id, label]) => <a key={id} href={`#/${id}`} aria-current={tab === id ? "page" : undefined} className="tab">{label}</a>)}
+      <header className="shell-bar">
+        <span className="shell-brand">
+          <span className="shell-logo" aria-hidden="true">OBO</span>
+          <h1>OBO Delegation Inspector LAB</h1>
+          {info?.source === "real"
+            ? <span className="shell-badge shell-badge--real" data-testid="mode-badge">Real<span className="sr-only">: runs against your configured PingOne tenant</span></span>
+            : <span className="shell-badge" data-testid="mode-badge">Mock<span className="sr-only">: in-process mock issuer, exchanger and downstream, no tenant contacted</span></span>}
+        </span>
+        <nav className="shell-nav" aria-label="Tabs">
+          {TABS.map(([id, label]) => <a key={id} href={`#/${id}`} aria-current={tab === id ? "page" : undefined}>{label}</a>)}
         </nav>
+        <TopMenu
+          mode={{ value: info?.source === "real" ? "real" : "mock", onChange: onMode, realAvailable: info ? info.realAvailable === true : null, realHint: info && info.realAvailable !== true ? info.realReason : undefined }}
+          theme={{ value: theme === "system" ? "auto" : theme, onChange: (v) => { setTheme(v === "auto" ? "system" : v); write("obol.theme", v === "auto" ? "system" : v); } }}
+          present={{ active: present, onToggle: () => setPresent((v) => { write("obol.present", v ? "0" : "1"); return !v; }) }}
+          help={{ href: "https://github.com/curtismu7/obo-lab-LAB#readme" }}
+          version={info?.version || null}
+          onReset={async () => { await resetServer(); setRun(null); setAnnounce("Reset."); }}
+        >
+          <ShelfLink />
+          <VerifyMark id="obo-lab" />
+          <ReturnLink app="obo-lab" variant="header" />
+        </TopMenu>
       </header>
       <main className="page" id="main" tabIndex={-1}>
+        <p className="banner" data-testid="banner">{banner}</p>
+        <ReturnLink app="obo-lab" />
         {tab === "run"
           ? <RunTab catalog={catalog} run={run} busy={busy} error={error} onRun={onRun} onRevoke={onRevoke} source={info?.source} />
           : <WireTab run={run} />}
