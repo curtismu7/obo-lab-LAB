@@ -5,7 +5,7 @@ import React from "react";
 import fs from "node:fs";
 import path from "node:path";
 import App, { FALLBACK_BANNER } from "../App.jsx";
-import { runObo, requestModeSwitch } from "../lib/api.js";
+import { runObo, requestModeSwitch, getInfo } from "../lib/api.js";
 import { setJsonView } from "../components/JsonPane.jsx";
 
 vi.mock("../lib/api.js", () => ({
@@ -117,4 +117,16 @@ test("the live announcement is screen-reader only: it carries the shared sr-only
   expect(live).not.toHaveClass("visually-hidden");
   const css = fs.readFileSync(path.join(process.cwd(), "src", "app.css"), "utf8");
   expect(css).toMatch(/\.sr-only\s*\{[^}]*clip:/);
+});
+
+test("the lab version from /api/info reaches the TopMenu version button, and stays after a mode switch", async () => {
+  getInfo.mockResolvedValueOnce({ source: "mock", realAvailable: true, banner: "B", version: "9.8.7" });
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByTestId("banner");
+  expect(await screen.findByTestId("version")).toHaveTextContent("9.8.7");
+  requestModeSwitch.mockResolvedValueOnce({ source: "real", realAvailable: true, banner: "REAL B", version: "9.8.7" });
+  await user.selectOptions(screen.getByTestId("mode-select"), "real");
+  await waitFor(() => expect(screen.getByTestId("banner")).toHaveTextContent("REAL B"));
+  expect(screen.getByTestId("version")).toHaveTextContent("9.8.7");
 });
