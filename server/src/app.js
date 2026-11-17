@@ -9,6 +9,7 @@ import { createHealth, DEMO } from './health.js';
 import { createWorld, personaOf, agentOf, exchangerOf, downstreamOf, jwtDecode } from './obo.js';
 import { createMode, MODES } from './mode.js';
 import { DIAGRAM_NAMES, loadDiagram } from './diagramData.js';
+import { TALK_INTRO, TALK_OUTRO, talkLines } from './talkTrack.js';
 import { realRun } from './realPingOne.js';
 import { workspaceId } from './workspace.js';
 import { shelfInfo } from './shelfLink.js';
@@ -46,6 +47,7 @@ export function createApp({ health = createHealth(), mode = createMode(), world 
     const name = DIAGRAM_NAMES.includes(req.query.name) ? req.query.name : DIAGRAM_NAMES[0];
     return res.json(loadDiagram(name));
   });
+  api.get('/talk', (req, res) => res.json({ talkTrack: [{ id: 'intro', title: 'Say first', say: TALK_INTRO }, ...talkLines(), { id: 'outro', title: 'Close', say: TALK_OUTRO }] }));
   api.get('/catalog', (_req, res) => res.json({
     banner: BANNER(mode.source()), source: mode.source(),
     persona: personaOf(), agent: agentOf(), exchanger: exchangerOf(),

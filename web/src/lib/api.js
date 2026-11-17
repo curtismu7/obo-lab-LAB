@@ -18,3 +18,4 @@ export const resetServer = () => postJson("/api/reset");
 export const runObo = () => postJson("/api/run");
 export const revokeAgent = () => postJson("/api/revoke");
 export const decodeToken = (token) => postJson("/api/decode", { token });
+export const getTalkTrack = () => getJson("/api/talk");
