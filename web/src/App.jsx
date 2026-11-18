@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { getCatalog, getInfo, requestModeSwitch, resetServer, runObo, revokeAgent } from "./lib/api.js";
+import { getCatalog, getInfo, requestModeSwitch, resetServer, runObo, revokeAgent, getTalkTrack } from "./lib/api.js";
+import TalkTrackDialog from "./talk-track/TalkTrackDialog.jsx";
 import Json from "./components/JsonPane.jsx";
 import ShelfLink from "./components/ShelfLink.jsx";
 import VerifyMark from "./components/VerifyMark.jsx";
@@ -23,6 +24,9 @@ export default function App() {
   const [tab, setTab] = useState(tabFromHash);
   const [theme, setTheme] = useState(() => (["light", "dark"].includes(read("obol.theme", "")) ? read("obol.theme", "") : "system"));
   const [present, setPresent] = useState(() => read("obol.present", "0") === "1");
+  const [talkOpen, setTalkOpen] = useState(false);
+  const [talk, setTalk] = useState([]);
+  useEffect(() => { getTalkTrack().then((t) => setTalk(t.talkTrack ?? [])).catch(() => {}); }, []);
   const [run, setRun] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -103,6 +107,7 @@ export default function App() {
           mode={{ value: info?.source === "real" ? "real" : "mock", onChange: onMode, realAvailable: info ? info.realAvailable === true : null, realHint: info && info.realAvailable !== true ? info.realReason : undefined }}
           theme={{ value: theme === "system" ? "auto" : theme, onChange: (v) => { setTheme(v === "auto" ? "system" : v); write("obol.theme", v === "auto" ? "system" : v); } }}
           present={{ active: present, onToggle: () => setPresent((v) => { write("obol.present", v ? "0" : "1"); return !v; }) }}
+          talkTrack={{ active: talkOpen, onToggle: () => setTalkOpen((v) => !v) }}
           help={{ href: "https://github.com/curtismu7/obo-lab-LAB#readme" }}
           version={info?.version || null}
           onReset={async () => { await resetServer(); setRun(null); setAnnounce("Reset."); }}
@@ -121,6 +126,8 @@ export default function App() {
       </main>
       <footer><p className="muted small">Delegation, not impersonation: sub stays the person, act names the agent, aud and scope narrow. Tokens are one input to enforcement — the act claim is what the downstream checks.</p></footer>
       <div aria-live="polite" className="sr-only">{announce}</div>
+      <TalkTrackDialog isOpen={talkOpen} onClose={() => setTalkOpen(false)} talk={talk} />
+
     </>
   );
 }
