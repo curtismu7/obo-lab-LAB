@@ -39,7 +39,7 @@ export function createApp({ health = createHealth(), mode = createMode(), world 
     if (!b || typeof b !== 'object' || Array.isArray(b) || Object.keys(b).length !== 1 || !MODES.includes(b.source)) return bad(res, 'body must be exactly {"source": "mock" or "real"}');
     if (b.source === 'real' && mode.info().realAvailable !== true) return res.status(409).json({ error: 'conflict', message: mode.info().realReason });
     mode.set(b.source);
-    return res.json({ ...mode.info(), banner: BANNER(mode.source()) });
+    return res.json({ ...mode.info(), version: DEMO.version || null, banner: BANNER(mode.source()) });
   });
 
   api.get('/diagram', (req, res) => {

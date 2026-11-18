@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createApp } from '../src/app.js';
 
 const call = async (app, method, path, body, extraHeaders = {}) => {
@@ -129,4 +130,12 @@ test('behind the lab-proxy: a write is accepted only with the proxy\'s forwarded
     // the forwarded headers are not believed on a loopback Host: a page that did not come through the proxy cannot use them
     assert.equal(await send(`127.0.0.1:${port}`, { ...FWD, origin: 'https://local.ping-devops.com:8443' }), 403);
   } finally { server.close(); delete process.env.LAB_ALLOWED_HOSTS; }
+});
+
+test('info and a mode switch carry the lab version from server/package.json (the TopMenu version button reads it)', async () => {
+  const { version } = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.match(version, /^\d+\.\d+\.\d+/);
+  const app = mk();
+  assert.equal((await call(app, 'GET', '/api/info')).json.version, version);
+  assert.equal((await call(app, 'POST', '/api/mode', { source: 'mock' })).json.version, version);
 });
