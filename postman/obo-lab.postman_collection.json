@@ -1,0 +1,245 @@
+{
+  "info": {
+    "name": "OBO Lab",
+    "description": "API collection for OBO Lab: run the on-behalf-of exchange scenario end to end against in-process mock issuer, exchanger and downstream (inbound token, actor claims, delegated token, downstream call, delta and leak analysis), and decode the mock tokens. Everything is a labelled mock; the lab has no live mode.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "d2ca2c20-73ba-409e-a844-fbfd3e5c0d4e"
+  },
+  "item": [
+    {
+      "name": "Sanity (mock, labelled)",
+      "description": "Health, mode info, and the scenario catalog (persona, agent, exchanger, downstream).",
+      "item": [
+        {
+          "name": "Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "/* Assertions for this request */",
+                  "pm.response.to.have.status(200);",
+                  "pm.expect(pm.response.json().state).to.eql('ready');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{LAB_BASE}}/api/health",
+              "host": [
+                "{{LAB_BASE}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "/* Assertions for this request */",
+                  "pm.response.to.have.status(200);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{LAB_BASE}}/api/info",
+              "host": [
+                "{{LAB_BASE}}"
+              ],
+              "path": [
+                "api",
+                "info"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Scenario catalog",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "/* Assertions for this request */",
+                  "pm.response.to.have.status(200);",
+                  "pm.expect(pm.response.json()).to.have.property('persona');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{LAB_BASE}}/api/catalog",
+              "host": [
+                "{{LAB_BASE}}"
+              ],
+              "path": [
+                "api",
+                "catalog"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Run the OBO exchange",
+      "description": "One run produces the whole story: inbound token, actor, delegated token, downstream call, the claim delta and the leak analysis. Decode inspects a pasted token; revoke clears state.",
+      "item": [
+        {
+          "name": "Run the exchange",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "/* Assertions for this request */",
+                  "pm.response.to.have.status(200);",
+                  "pm.expect(pm.response.json().ok).to.eql(true);",
+                  "pm.expect(pm.response.json()).to.have.property('delegated');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{LAB_BASE}}/api/run",
+              "host": [
+                "{{LAB_BASE}}"
+              ],
+              "path": [
+                "api",
+                "run"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Decode a non-JWT (negative)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "/* Assertions for this request */",
+                  "pm.expect(pm.response.code).to.eql(400);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"not-a-jwt\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{LAB_BASE}}/api/decode",
+              "host": [
+                "{{LAB_BASE}}"
+              ],
+              "path": [
+                "api",
+                "decode"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke / clear state",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "/* Assertions for this request */",
+                  "pm.response.to.have.status(200);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{LAB_BASE}}/api/revoke",
+              "host": [
+                "{{LAB_BASE}}"
+              ],
+              "path": [
+                "api",
+                "revoke"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "LAB_BASE",
+      "value": "http://localhost:7560"
+    }
+  ]
+}

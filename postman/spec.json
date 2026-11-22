@@ -1,0 +1,36 @@
+{
+  "name": "OBO Lab",
+  "slug": "obo-lab",
+  "description": "API collection for OBO Lab: run the on-behalf-of exchange scenario end to end against in-process mock issuer, exchanger and downstream (inbound token, actor claims, delegated token, downstream call, delta and leak analysis), and decode the mock tokens. Everything is a labelled mock; the lab has no live mode.",
+  "baseUrl": "http://localhost:7560",
+  "env": {},
+  "folders": [
+    {
+      "name": "Sanity (mock, labelled)",
+      "description": "Health, mode info, and the scenario catalog (persona, agent, exchanger, downstream).",
+      "requests": [
+        { "name": "Health", "method": "GET", "path": "/api/health",
+          "tests": ["pm.response.to.have.status(200);", "pm.expect(pm.response.json().state).to.eql('ready');"] },
+        { "name": "Info", "method": "GET", "path": "/api/info",
+          "tests": ["pm.response.to.have.status(200);"] },
+        { "name": "Scenario catalog", "method": "GET", "path": "/api/catalog",
+          "tests": ["pm.response.to.have.status(200);", "pm.expect(pm.response.json()).to.have.property('persona');"] }
+      ]
+    },
+    {
+      "name": "Run the OBO exchange",
+      "description": "One run produces the whole story: inbound token, actor, delegated token, downstream call, the claim delta and the leak analysis. Decode inspects a pasted token; revoke clears state.",
+      "requests": [
+        { "name": "Run the exchange", "method": "POST", "path": "/api/run",
+          "body": {},
+          "tests": ["pm.response.to.have.status(200);", "pm.expect(pm.response.json().ok).to.eql(true);", "pm.expect(pm.response.json()).to.have.property('delegated');"] },
+        { "name": "Decode a non-JWT (negative)", "method": "POST", "path": "/api/decode",
+          "body": { "token": "not-a-jwt" },
+          "tests": ["pm.expect(pm.response.code).to.eql(400);"] },
+        { "name": "Revoke / clear state", "method": "POST", "path": "/api/revoke",
+          "body": {},
+          "tests": ["pm.response.to.have.status(200);"] }
+      ]
+    }
+  ]
+}

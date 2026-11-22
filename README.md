@@ -59,6 +59,15 @@ A visible Mock / Real toggle sits in the header of every page; pressed = current
 
 ## Health, doctor and reset
 
+## Postman collection
+
+`postman/obo-lab.postman_collection.json` runs the OBO story without the UI: the run endpoint (inbound token, actor, delegated token, downstream call, delta and leak analysis in one answer), the decode negative, and revoke. It needs no environment — the issuer, exchanger and downstream are in-process labelled mocks and the lab has no live mode.
+
+```
+node ../../shared/postman/generator.mjs --spec postman/spec.json            # regenerate (never hand-edit the output)
+npx newman run postman/obo-lab.postman_collection.json
+```
+
 `GET /api/health` returns `demo-health/1`. `npm run doctor` runs the same checks plus the mock run and a revocation proof. `npm run reset` clears runs and revocation.
 
 ## Docker
