@@ -1,4 +1,5 @@
 // The run: 7 steps down the left, the diff table when it lands, revoke + run again to show the refusal.
+import RunObs from "../components/RunObs.jsx";
 
 function Delta({ run }) {
   const d = run.delta ?? {};
@@ -20,7 +21,7 @@ function Delta({ run }) {
   );
 }
 
-export default function RunTab({ catalog, run, busy, error, onRun, onRevoke, source }) {
+export default function RunTab({ catalog, run, busy, error, onRun, onRevoke, source, attempt }) {
   return (
     <section aria-label="Run the delegation" className="stack">
       <div className="head__tools">
@@ -47,6 +48,7 @@ export default function RunTab({ catalog, run, busy, error, onRun, onRevoke, sou
           {run.tokensRedacted ? <p className="muted small">Real mode: token bodies stay on the server; only claims and sha256/8 hashes are shown.</p> : null}
         </>
       ) : <p className="muted" role="status">Run once to see the whole chain, then revoke the agent and run again for the refusal.</p>}
+      <RunObs attempt={attempt} mode={source} />
       <p className="muted small">{catalog?.downstream ? `Downstream accepts aud ${catalog.downstream.aud} with scope "${catalog.downstream.acceptedScope}" and requires act.` : ""}</p>
     </section>
   );

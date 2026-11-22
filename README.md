@@ -22,7 +22,22 @@ npm start         # http://localhost:7560
 ./scripts/run.sh  # same, checks the port first
 ```
 
-Endpoints: `GET /api/health`, `GET /api/catalog`, `POST /api/run`, `POST /api/decode`, `POST /api/revoke`, `POST /api/reset`, `POST /api/mode`, `GET /api/info`.
+Endpoints: `GET /api/health`, `GET /api/catalog`, `POST /api/run`, `POST /api/decode`, `POST /api/revoke`, `POST /api/reset`, `POST /api/mode`, `GET /api/info`, `GET /api/run-observability`.
+
+## What each layer logged for the run (rule 27)
+
+Under the run the page shows the shared run-observability panel: the decisions of the latest run in time order over six layers, each row tagged with where it came from. **Mock:** `simulated`, computed by the lab's own mock on this run. **Real:** `response`, an answer this lab received from PingOne's token endpoint (client credentials, the RFC 8693 exchange) or from the downstream API, never `logged`. This lab reads no product logs (no Elasticsearch, no Docker socket, no `RUN_OBS_*` setting), so nothing is ever tagged `logged`. Time on a row is when the lab recorded it (Mock rows are computed in one call, so they share a millisecond or two).
+
+| Layer | What it shows here |
+|---|---|
+| Person | Mock: the mock issuer signed the person's token (`sub`). Real: `not-logged`, because the lab signs nobody in (the person's token is the owner's own) and PingOne sign-in is in the PingOne audit activity API, which the panel does not read yet |
+| Agent (OBO) | the agent's identity (client credentials) and the exchange: which `sub` and which actor (`act.sub`, the top actor only) the delegated token names; a revoked agent is a refused row (`invalid_client`) |
+| Authorize | `not-logged`: this lab does not call PingOne Authorize |
+| Privilege | `not-logged`: this lab has no Privilege policy, AI Guard or approval step |
+| Agent gateway | `not-logged`: this lab calls the downstream directly |
+| Resource server | the downstream API's answer to the delegated token (accepted) and to the person's own token (refused, no `act`; if the downstream accepts it the row stays allowed and says the lab expected a refusal). In Real a 2xx is allowed only when its body reads as JSON without an error and was not redirected; a 200 with an error body is refused; an unreadable body, a redirect, a 5xx or no reply is information |
+
+Each decision also leaves one stdout line from the lab's own server: `<iso> obo-lab decision step=<step> actor=<who> result=passed|stopped|unclear run=<id> mode=<mock|real>`, never a token. Where the logs live and where they can stream: the lab's decision lines are in the container stdout and a collector that tails the container can ship them to `demo-logs-obo-lab` and on to a SIEM (this lab does not set that up); PingOne's own events are in the PingOne audit activity API and the downstream's in whatever the owner's downstream writes (neither is read here). Not logged today: Authorize, Privilege, the agent gateway, PingOne sign-in, and any line the products themselves wrote. The panel files are vendored byte for byte from the shared `shared/run-observability/` (sha256 pin; `scripts/run-observability.pin.test.mjs`): change them there, never here.
 
 ## Settings file
 

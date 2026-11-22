@@ -23,6 +23,7 @@ vi.mock("../lib/api.js", () => ({
   runObo: vi.fn(),
   revokeAgent: vi.fn(async () => ({ ok: true })),
   decodeToken: vi.fn(),
+  getRunObservability: vi.fn(async () => ({ record: null, message: "No run yet in Mock mode in this workspace: run the demo." })),
 }));
 
 beforeEach(() => { window.location.hash = ""; setJsonView("form"); });

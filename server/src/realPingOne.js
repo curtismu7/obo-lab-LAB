@@ -22,17 +22,30 @@ export function realConfigured(env = process.env) {
 export const NO_REAL = 'Real mode is not configured. Set PINGONE_ENVIRONMENT_ID, the Worker app client id + secret, and OBO_LAB_PERSON_TOKEN (a real person access token from your own sign-in) in ~/Development/.env, plus OBO_LAB_AUDIENCE, OBO_LAB_SCOPE and OBO_LAB_DOWNSTREAM. Then restart the lab. Agents never sign a person in; the owner supplies the subject token.';
 
 const form = (obj) => new URLSearchParams(obj).toString();
+const decode = (t) => { try { return JSON.parse(Buffer.from(t.split('.')[1], 'base64url').toString('utf8')); } catch { return null; } };
+// What the downstream's body says, never the body itself: did it parse as a JSON object, and does it carry an error (a top-level error,
+// an isError flag or a JSON-RPC result flagged isError)? A 200 with an error body is not an accepted call.
+const replyShape = (b) => (b && typeof b === 'object' && !Array.isArray(b)
+  ? { parsed: true, bodyError: (b.error !== undefined && b.error !== null) || b.isError === true || b.result?.isError === true }
+  : { parsed: false, bodyError: false });
 
-async function tokenEndpoint(envId, body, key, { fetchFn = fetch } = {}) {
-  const r = await fetchFn(`https://auth.pingone.com/${envId}/as/token`, {
-    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: `Basic ${Buffer.from(key).toString('base64')}` }, body: form(body),
-  });
+// `onAnswer` (optional) is told what PingOne or the downstream answered, step by step: the status (null when the call did not complete),
+// the OAuth error code, the decoded claims of a token the lab received and, for the downstream, whether the answer was redirected and what
+// shape its body had. Never a token body, never the error text. The run-observability record is built from these.
+async function tokenEndpoint(envId, body, key, { fetchFn = fetch, onAnswer, step } = {}) {
+  let r;
+  try {
+    r = await fetchFn(`https://auth.pingone.com/${envId}/as/token`, {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: `Basic ${Buffer.from(key).toString('base64')}` }, body: form(body),
+    });
+  } catch (e) { onAnswer?.({ step, status: null }); throw e; }
   const j = await r.json().catch(() => ({}));
+  onAnswer?.({ step, status: r.status, error: j.error, claims: r.ok ? decode(j.access_token) : null });
   if (!r.ok) throw new Error(`PingOne token endpoint answered HTTP ${r.status}: ${j.error ?? ''} ${j.error_description ?? ''}`.trim());
   return j;
 }
 
-export async function realRun({ fetchFn = fetch, env = process.env } = {}) {
+export async function realRun({ fetchFn = fetch, env = process.env, onAnswer } = {}) {
   const e = { ...env, ...loadSharedEnv() };
   const envId = e.PINGONE_ENVIRONMENT_ID;
   const clientId = e.PINGONE_WORKER_CLIENT_ID || e.PINGONE_WORKER_ID;
@@ -44,7 +57,7 @@ export async function realRun({ fetchFn = fetch, env = process.env } = {}) {
   const downstream = e.OBO_LAB_DOWNSTREAM;
   if (!audience || !downstream) throw new Error('Real mode needs OBO_LAB_AUDIENCE and OBO_LAB_DOWNSTREAM in ~/Development/.env');
   // step 2: agent identity (client credentials)
-  const cc = await tokenEndpoint(envId, { grant_type: 'client_credentials', scope: e.OBO_LAB_AGENT_SCOPE || 'agent:identity' }, key, { fetchFn });
+  const cc = await tokenEndpoint(envId, { grant_type: 'client_credentials', scope: e.OBO_LAB_AGENT_SCOPE || 'agent:identity' }, key, { fetchFn, onAnswer, step: 'actor' });
   // step 3: the exchange
   const xchg = await tokenEndpoint(envId, {
     grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
@@ -52,12 +65,17 @@ export async function realRun({ fetchFn = fetch, env = process.env } = {}) {
     actor_token: cc.access_token, actor_token_type: 'urn:ietf:params:oauth:token-type:access_token',
     requested_token_type: 'urn:ietf:params:oauth:token-type:access_token',
     audience, scope,
-  }, key, { fetchFn });
+  }, key, { fetchFn, onAnswer, step: 'exchange' });
   // step 5/6: the downstream accepts the delegated and refuses the person's own
-  const call = async (token) => { const r = await fetchFn(downstream, { headers: { authorization: `Bearer ${token}` } }); return r.status; };
-  const delegatedStatus = await call(xchg.access_token);
-  const inboundStatus = await call(personToken);
-  const decode = (t) => { try { return JSON.parse(Buffer.from(t.split('.')[1], 'base64url').toString('utf8')); } catch { return null; } };
+  const call = async (token, step) => {
+    let r;
+    try { r = await fetchFn(downstream, { headers: { authorization: `Bearer ${token}` } }); } catch (e) { onAnswer?.({ step, status: null }); throw e; }
+    const body = await r.json().catch(() => undefined);
+    onAnswer?.({ step, status: r.status, redirected: r.redirected === true, ...replyShape(body) });
+    return r.status;
+  };
+  const delegatedStatus = await call(xchg.access_token, 'downstream-delegated');
+  const inboundStatus = await call(personToken, 'downstream-own');
   const d = decode(xchg.access_token) ?? {};
   const i = decode(personToken) ?? {};
   return {
