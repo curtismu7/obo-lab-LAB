@@ -69,6 +69,13 @@ describe("RunObs", () => {
     await waitFor(() => expect(screen.getByTestId("ro-error").textContent).toMatch(/Could not reach the server/));
   });
 
+  it("the answer the api helper gives for a 200 that is not a record (bad_answer) is shown as an error, not the empty state", async () => {
+    getRunObservability.mockResolvedValue({ error: "bad_answer", message: "The server answered something that is not a run record." });
+    render(<RunObs attempt={1} mode="mock" />);
+    await waitFor(() => expect(screen.getByTestId("ro-error").textContent).toMatch(/not a run record/));
+    expect(screen.queryByTestId("ro-empty")).toBeNull();
+  });
+
   it("a new attempt re-reads; a mode switch back to the empty state (attempt 0) clears the panel", async () => {
     getRunObservability.mockResolvedValue({ record: mockRecord });
     const { rerender } = render(<RunObs attempt={1} mode="mock" />);

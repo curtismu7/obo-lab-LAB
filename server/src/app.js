@@ -13,7 +13,7 @@ import { TALK_INTRO, TALK_OUTRO, talkLines } from './talkTrack.js';
 import { realRun } from './realPingOne.js';
 import { workspaceId } from './workspace.js';
 import { RunObsError } from './runObservability.js';
-import { buildRunRecord, createRunLog, mockEvents, realEvent } from './runObs.js';
+import { buildRunRecord, createRunLog, guarded, mockEvents, realEvent } from './runObs.js';
 import { shelfInfo } from './shelfLink.js';
 
 const WEB_DIST = process.env.WEB_DIST || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');
@@ -63,18 +63,23 @@ export function createApp({ health = createHealth(), mode = createMode(), world 
     const source = mode.source();
     const ws = workspaceId(req);
     const log = runLog.begin(ws, source);
+    let status = 200; let body;
     try {
       let run;
-      if (source === 'real') run = await real({ onAnswer: (a) => log.record(realEvent(a)) });
+      if (source === 'real') run = await real({ onAnswer: (a) => guarded(() => log.record(realEvent(a))) });
       else {
         run = await world.run();
-        for (const e of mockEvents(run, agentOf().clientId)) log.record(e);
+        let events = [];
+        guarded(() => { events = mockEvents(run, agentOf().clientId); });
+        for (const e of events) guarded(() => log.record(e));
       }
       if (run) run.workspaceId = ws;
-      return res.json({ banner: BANNER(source), source, ...run });
+      body = { banner: BANNER(source), source, ...run };
     } catch (e) {
-      return res.status(502).json({ error: 'real_unavailable', message: e.message });
+      status = 502; body = { error: 'real_unavailable', message: e.message };
     }
+    log.finish(); // before the answer is sent, so a reader that comes right after it sees this run, not "in progress"
+    return res.status(status).json(body);
   });
 
   // Rule 27: what each layer logged for this workspace's latest run in the CURRENT mode. Mock rows are simulated, Real rows are replies
@@ -83,7 +88,8 @@ export function createApp({ health = createHealth(), mode = createMode(), world 
     res.set('Cache-Control', 'no-store');
     const source = mode.source();
     try {
-      const run = runLog.latest(workspaceId(req), source);
+      const { run, open } = runLog.latest(workspaceId(req), source);
+      if (open) return res.json({ record: null, message: 'A run is in progress in this workspace: read the record again when it ends.' });
       if (!run) return res.json({ record: null, message: `No run yet in ${source === 'real' ? 'Real' : 'Mock'} mode in this workspace: run the demo.` });
       const record = await buildRunRecord({ run });
       return res.json(record ? { record } : { record: null, message: 'The last attempt began no step: nothing answered (the error is under Run). Nothing older is shown instead.' });

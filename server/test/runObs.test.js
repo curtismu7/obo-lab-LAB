@@ -10,7 +10,7 @@ import { createApp } from '../src/app.js';
 import { createMode } from '../src/mode.js';
 import { realRun } from '../src/realPingOne.js';
 import { assertRunObservability, classify, layerMatchers } from '../src/runObservability.js';
-import { buildRunRecord, createRunLog } from '../src/runObs.js';
+import { buildRunRecord, createRunLog, mockEvents, realEvent } from '../src/runObs.js';
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'obo-obs-'));
 const savedEnvFile = process.env.STANDALONE_ENV;
@@ -20,11 +20,17 @@ after(() => { if (savedEnvFile === undefined) delete process.env.STANDALONE_ENV;
 const jwt = (claims) => `e30.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.sig`;
 const PERSON = jwt({ sub: 'person-sub-1234567890', scope: 'openid checking:read checking:write transfer:write' });
 const REAL_ENV = { PINGONE_ENVIRONMENT_ID: 'env-fake', PINGONE_WORKER_CLIENT_ID: 'worker-fake', PINGONE_WORKER_CLIENT_SECRET: 'secret-fake', OBO_LAB_PERSON_TOKEN: PERSON, OBO_LAB_AUDIENCE: 'https://api.fabrikam.example', OBO_LAB_DOWNSTREAM: 'https://api.fabrikam.example/x' };
-// A fake PingOne + downstream. `plan` overrides an answer: { actor, exchange, delegated, own } as [status, body].
+// A fake PingOne + downstream. `plan` overrides an answer: { actor, exchange, delegated, own } as [status, body, extra] (a body of undefined
+// is not JSON; extra.redirected marks a followed redirect; extra.gate is a promise the answer waits for) or 'throw' (the call does not complete).
 const fakeFetch = (plan = {}) => async (url, init = {}) => {
   const u = String(url);
   const body = new URLSearchParams(String(init.body ?? ''));
-  const answer = (pair) => { const [status, json] = pair; return { ok: status >= 200 && status < 300, status, json: async () => json }; };
+  const answer = async (pair) => {
+    if (pair === 'throw') throw new Error('connect ECONNREFUSED');
+    const [status, json, extra = {}] = pair;
+    if (extra.gate) await extra.gate;
+    return { ok: status >= 200 && status < 300, status, redirected: extra.redirected === true, json: async () => { if (json === undefined) throw new SyntaxError('not json'); return json; } };
+  };
   if (u.includes('/as/token')) {
     if (body.get('grant_type') === 'client_credentials') return answer(plan.actor ?? [200, { access_token: jwt({ sub: 'agent-client-9876543210' }) }]);
     return answer(plan.exchange ?? [200, { access_token: jwt({ sub: 'person-sub-1234567890', act: { sub: 'agent-client-9876543210', act: { sub: 'deeper-agent' } }, scope: 'checking:read transfer:write' }) }]);
@@ -194,7 +200,7 @@ test('the lab server writes one timestamped stdout line per decision: step, acto
     await call('POST', '/api/revoke');
     await call('POST', '/api/run');
     assert.equal(lines.length, 6);
-    for (const l of lines) assert.match(l, /^\d{4}-\d\d-\d\dT[\d:.]+Z obo-lab decision step=[\w.:/@-]+ actor=[\w.:/@-]+ result=(passed|stopped|unclear) run=obo-\d+ mode=mock$/);
+    for (const l of lines) assert.match(l, /^\d{4}-\d\d-\d\dT[\d:.]+Z obo-lab decision step=[\w.:/@-]+ actor=[\w.:/@-]+ result=(passed|stopped|unclear) run=obo-\d+-\d+ mode=mock$/);
     assert.deepEqual(lines.map((l) => l.split(' ').slice(3, 6).join(' ')), [
       'step=person actor=user.0042 result=passed', 'step=agent-identity actor=personal-agent result=passed', 'step=exchange actor=personal-agent result=passed',
       'step=downstream-delegated actor=personal-agent result=passed', 'step=downstream-own actor=user.0042 result=stopped', 'step=agent-identity actor=personal-agent result=stopped',
@@ -214,7 +220,7 @@ test('hostile and long names stay inert: a newline or key=value in a name cannot
   log.record({ layer: 'agent', step: 'exchange', actor: nasty, outcome: 'allowed', product: 'lab mock exchanger', message: `RFC 8693 exchange: sub ${nasty.slice(0, 60)}`, detail: { sub: nasty } });
   assert.equal(lines.length, 1);
   assert.ok(!lines[0].includes('\n') && !lines[0].includes(' step=x') && lines[0].length < 260);
-  assert.match(lines[0], / actor=[\w.:/@-]{1,64} result=passed run=obo-\d+ mode=mock$/);
+  assert.match(lines[0], / actor=[\w.:/@-]{1,64} result=passed run=obo-\d+-\d+ mode=mock$/);
 });
 
 test('hostile and long names: the record built from them passes assertRunObservability and is not marked truncated', async () => {
@@ -227,15 +233,40 @@ test('hostile and long names: the record built from them passes assertRunObserva
   assert.match(r.rows[0].message, /<img src=x onerror=alert\(1\)>/, 'kept as inert text; the panel renders it as text');
 });
 
-test('the run log keeps the latest attempt per mode and bounds the number of workspaces', () => {
-  const log = createRunLog({ write: () => {} });
+test('the run log keeps the latest finished attempt per mode, tells readers about an open one, and bounds the workspaces', () => {
+  const log = createRunLog({ write: () => {}, clock: () => 1000 });
   const a = log.begin('w', 'mock'); a.record({ layer: 'agent', step: 'exchange', outcome: 'allowed', message: 'm' });
+  assert.deepEqual(log.latest('w', 'mock'), { run: null, open: true });
+  assert.deepEqual(log.latest('w', 'real'), { run: null, open: false }, 'a Mock run in flight says nothing about Real');
+  a.finish();
   const b = log.begin('w', 'mock');
-  assert.equal(log.latest('w', 'mock'), b.run);
-  assert.equal(log.latest('w', 'real'), null);
-  for (let i = 0; i < 40; i += 1) log.begin(`ws-${i}`, 'real');
-  assert.equal(log.latest('w', 'mock'), null, 'the oldest workspace was evicted');
-  assert.ok(log.latest('ws-39', 'real'));
+  assert.equal(log.latest('w', 'mock').run, a.run, 'the older finished run stays until the new one finishes');
+  b.finish();
+  assert.equal(log.latest('w', 'mock').run, b.run);
+  assert.notEqual(a.run.id, b.run.id, 'two attempts in the same millisecond have different run ids');
+  for (let i = 0; i < 40; i += 1) log.begin(`ws-${i}`, 'real').finish();
+  assert.equal(log.latest('w', 'mock').run, null, 'the oldest finished workspace was evicted');
+  assert.ok(log.latest('ws-39', 'real').run);
+});
+
+test('a workspace with a run in flight is never evicted, however many other workspaces come', () => {
+  const log = createRunLog({ write: () => {} });
+  const open = log.begin('busy', 'real');
+  for (let i = 0; i < 60; i += 1) log.begin(`other-${i}`, 'real').finish();
+  assert.deepEqual(log.latest('busy', 'real'), { run: null, open: true });
+  open.record({ layer: 'agent', step: 'actor', outcome: 'allowed', message: 'm' });
+  open.finish();
+  assert.equal(log.latest('busy', 'real').run, open.run);
+});
+
+test('two attempts in the same millisecond write different run ids on their stdout lines', async () => {
+  const lines = [];
+  await withLab(async ({ call }) => {
+    await call('POST', '/api/run');
+    await call('POST', '/api/run');
+  }, { mode: mockMode(), runLog: createRunLog({ write: (l) => lines.push(l), clock: () => 1795377003825 }) });
+  const ids = lines.map((l) => /run=(\S+)/.exec(l)[1]);
+  assert.equal(new Set(ids).size, 2);
 });
 
 test('a failure building the record is logged (code and message only) and answered as JSON { error, message }', async () => {
@@ -244,6 +275,7 @@ test('a failure building the record is logged (code and message only) and answer
     const runLog = createRunLog({ write: () => {} });
     const bad = runLog.begin('default', 'mock');
     bad.record({ layer: 'agent', step: 'exchange', outcome: 'allowed', product: 'p', message: 'm' });
+    bad.finish();
     bad.run.events[0].at = 'not-a-time';
     await withLab(async ({ call }) => {
       const r = await call('GET', '/api/run-observability');
@@ -267,4 +299,169 @@ test('this lab reads no logs: no server file names a reader, a socket or a run-o
     const src = fs.readFileSync(new URL(f, dir), 'utf8');
     assert.ok(!/runObservabilityReaders|ElasticsearchReader|DockerLogReader|readersFromEnv|RUN_OBS_|docker\.sock/.test(src), `${f} names a reader or a setting`);
   }
+});
+
+// ---- the downstream's answer is read, not only its status ----
+const resourceRows = (r) => r.rows.filter((x) => x.layer === 'resource' && x.origin === 'response');
+
+test('real: a downstream 2xx is allowed only when its body reads as JSON without an error and was not redirected', async () => {
+  const cases = [
+    ['200 with an error body', [200, { error: 'access_denied' }], 'refused', /with an error in its body/],
+    ['200 with a JSON-RPC error', [200, { error: { code: -32000 } }], 'refused', /with an error in its body/],
+    ['200 with an isError flag', [200, { isError: true }], 'refused', /with an error in its body/],
+    ['200 with a tool result flagged isError', [200, { result: { isError: true } }], 'refused', /with an error in its body/],
+    ['a followed redirect that ended in a 200', [200, {}, { redirected: true }], 'info', /after a redirect/],
+    ['200 whose body is not JSON', [200, undefined], 'info', /could not be read as JSON/],
+    ['200 whose body is JSON null', [200, null], 'info', /could not be read as JSON/],
+    ['a usable 200', [200, { result: { content: [] } }], 'allowed', /answered HTTP 200 to the delegated token\./],
+  ];
+  for (const [name, delegated, outcome, message] of cases) {
+    await withLab(async ({ call }) => {
+      await call('POST', '/api/run');
+      const { record: r } = await rec(call);
+      assert.deepEqual(assertRunObservability(r), [], name);
+      const row = resourceRows(r)[0];
+      assert.equal(row.outcome, outcome, name);
+      assert.match(row.message, message, name);
+      assert.equal(r.summary.allowed, 2 + (outcome === 'allowed' ? 1 : 0), `${name}: only a usable answer is counted as allowed`);
+    }, { real: realOf({ delegated }) });
+  }
+});
+
+test("the downstream accepting the person's own token stays allowed (that is what it did) but says the lab expects a refusal, in Real and in Mock", async () => {
+  await withLab(async ({ call }) => {
+    await call('POST', '/api/run');
+    const { record: r } = await rec(call);
+    assert.deepEqual(assertRunObservability(r), []);
+    const [delegated, own] = resourceRows(r);
+    assert.equal(own.outcome, 'allowed');
+    assert.match(own.message, /to the person's own token\. The lab expects this call to be refused\./);
+    assert.equal(own.detail.expected, 'refused');
+    assert.ok(!/expects/.test(delegated.message), 'the delegated token is expected to pass: no note');
+  }, { real: realOf({ own: [200, {}] }) });
+  const claims = { iss: 'https://mock-as.invalid', iat: 1, exp: 2 };
+  const world = { state: { runs: [] }, reset() {}, revokeAgent() {}, run: async () => ({
+    ok: true, inbound: { claims: { ...claims, sub: 'user.0042', client_id: 'web-banking' } }, actor: { claims: { ...claims, sub: 'personal-agent' } },
+    delegated: { claims: { ...claims, sub: 'user.0042', act: { sub: 'personal-agent' }, scope: 'checking:read' } },
+    downstream: { delegatedStatus: 200, delegatedWhy: 'fine', inboundStatus: 200, inboundWhy: 'fine' },
+  }) };
+  await withLab(async ({ call }) => {
+    await call('POST', '/api/run');
+    const { record: r } = await rec(call);
+    assert.deepEqual(assertRunObservability(r), []);
+    const sim = r.rows.filter((x) => x.layer === 'resource');
+    assert.deepEqual(sim.map((x) => x.origin), ['simulated', 'simulated'], 'a mock record has simulated rows, never responses');
+    assert.equal(sim[1].outcome, 'allowed');
+    assert.match(sim[1].message, /The lab expects this call to be refused\.$/);
+  }, { mode: mockMode(), world });
+});
+
+test('claims are shown only when they are strings: act without a sub, objects and a string payload never print as undefined or native code', async () => {
+  const msg = (claims) => realEvent({ step: 'exchange', status: 200, claims }).message;
+  assert.match(msg({ sub: 's-1', act: { client_id: 'c-1' } }), /sub s-1 and act present, no sub\./);
+  assert.match(msg({ sub: 's-1' }), /act none\./);
+  assert.match(msg({ sub: { x: 1 }, act: { sub: 5 } }), /sub not a string and act not a string\./);
+  assert.match(msg({ sub: 's-1', act: 'agent' }), /act not a string\./);
+  for (const bad of ['a string payload', 7, ['sub'], null]) {
+    const m = msg(bad);
+    assert.match(m, /could not be read as a JWT/);
+    assert.ok(!/native code|\[object|undefined/.test(m), m);
+  }
+  assert.equal(realEvent({ step: 'exchange', status: 200, claims: 'abc' }).who, undefined, 'nothing is declared as a correlation id');
+  // the long value is bounded, and the same rules hold in Mock
+  assert.ok(msg({ sub: 'x'.repeat(500) }).length < 400);
+  const run = { ok: true, inbound: { claims: { sub: { a: 1 }, client_id: 'web-banking' } }, actor: { claims: { sub: 'p' } }, delegated: { claims: { sub: 's', act: { client_id: 'c' } } },
+    downstream: { delegatedStatus: 200, delegatedWhy: 'w', inboundStatus: 401, inboundWhy: 'w' } };
+  const events = mockEvents(run, 'p');
+  assert.match(events[0].message, /sub not a string/);
+  assert.match(events[2].message, /sub s, act present, no sub$/);
+  assert.ok(!JSON.stringify(events).includes('[object'));
+  // end to end: a delegated token whose payload decodes to a JSON string
+  await withLab(async ({ call }) => {
+    assert.equal((await call('POST', '/api/run')).status, 200);
+    const { record: r } = await rec(call);
+    assert.deepEqual(assertRunObservability(r), []);
+    assert.match(r.rows.find((x) => /token exchange/.test(x.message)).message, /could not be read as a JWT/);
+  }, { real: realOf({ exchange: [200, { access_token: `e30.${Buffer.from('"abc"').toString('base64url')}.sig` }] }) });
+});
+
+test('outcomes: 401/403 and OAuth decision errors are refused; malformed requests, 5xx and other codes are information (Mock and Real alike)', () => {
+  const o = (status, error, step = 'actor') => realEvent({ step, status, error }).outcome;
+  for (const e of ['access_denied', 'invalid_client', 'unauthorized_client', 'invalid_grant']) assert.equal(o(400, e), 'refused', e);
+  for (const e of ['invalid_request', 'invalid_scope', 'unsupported_grant_type', 'unsupported_response_type', 'server_error', undefined]) assert.equal(o(400, e), 'info', String(e));
+  assert.equal(o(401, 'invalid_client'), 'refused');
+  assert.equal(o(403), 'refused');
+  assert.equal(o(503), 'info');
+  assert.equal(o(200), 'allowed');
+  assert.equal(o(400, undefined, 'downstream-delegated'), 'info', 'a downstream 400 is a malformed request, not a decision');
+  assert.equal(o(403, undefined, 'downstream-delegated'), 'refused');
+  const run = (d, i) => ({ ok: true, inbound: { claims: { sub: 'u', client_id: 'c' } }, actor: { claims: { sub: 'a' } }, delegated: { claims: { sub: 'u', act: { sub: 'a' } } }, downstream: { delegatedStatus: d, delegatedWhy: 'w', inboundStatus: i, inboundWhy: 'w' } });
+  assert.deepEqual(mockEvents(run(200, 401), 'a').slice(3).map((e) => e.outcome), ['allowed', 'refused']);
+  assert.deepEqual(mockEvents(run(500, 403), 'a').slice(3).map((e) => e.outcome), ['info', 'refused']);
+});
+
+test('a call that never completes is a no-reply information row, not a silent gap: downstream, and PingOne', async () => {
+  await withLab(async ({ call, lines }) => {
+    assert.equal((await call('POST', '/api/run')).status, 502);
+    const { record: r } = await rec(call);
+    assert.deepEqual(assertRunObservability(r), []);
+    const [delegated, own] = resourceRows(r);
+    assert.equal(delegated.outcome, 'allowed');
+    assert.equal(own.outcome, 'info');
+    assert.match(own.message, /gave no reply to the person's own token/);
+    assert.match(lines.at(-1), /step=downstream-own actor=- result=no-reply run=obo-\d+-\d+ mode=real$/);
+    assert.deepEqual(r.summary, { allowed: 3, refused: 0, blocked: 0, info: 1, unverified: 0 });
+  }, { real: realOf({ own: 'throw' }) });
+  await withLab(async ({ call, lines }) => {
+    assert.equal((await call('POST', '/api/run')).status, 502);
+    const { record: r } = await rec(call);
+    assert.deepEqual(assertRunObservability(r), []);
+    assert.deepEqual(r.rows.filter((x) => x.origin === 'response').map((x) => `${x.layer}|${x.outcome}`), ['agent|info']);
+    assert.match(r.reasons.resource, /was not called on this run: an earlier PingOne step was refused or got no reply/);
+    assert.match(lines[0], /step=actor actor=- result=no-reply /);
+  }, { real: realOf({ actor: 'throw' }) });
+});
+
+test('a second reader during an in-flight Real run is told a run is in progress, not that it began no step; then it reads the finished run', async () => {
+  const plan = {};
+  await withLab(async ({ call }) => {
+    await call('POST', '/api/run');
+    const older = (await rec(call)).record;
+    let release; const gate = new Promise((r) => { release = r; });
+    plan.delegated = [200, {}, { gate }];
+    const inflight = call('POST', '/api/run');
+    let during;
+    for (let i = 0; i < 100; i += 1) { during = await rec(call); if (during.message) break; await new Promise((r) => setTimeout(r, 10)); }
+    assert.deepEqual(during, { record: null, message: 'A run is in progress in this workspace: read the record again when it ends.' });
+    assert.equal((await rec(call, 'ws-other')).message, 'No run yet in Real mode in this workspace: run the demo.', 'another workspace is not affected');
+    release();
+    assert.equal((await inflight).status, 200);
+    const after = (await rec(call)).record;
+    assert.ok(after && after.runId !== older.runId, 'the finished run replaced the older one');
+  }, { real: realOf(plan) });
+});
+
+test('recording a decision never fails a run that happened: the failure goes to stderr (code and message only) and the run is still answered', async () => {
+  const err = mock.method(console, 'error', () => {});
+  try {
+    await withLab(async ({ call }) => { // the stdout write throws on every line
+      const r = await call('POST', '/api/run');
+      assert.equal(r.status, 200);
+      assert.equal(r.body.ok, true);
+      assert.equal(err.mock.callCount(), 5, 'one per event, so one bad line does not lose the rest');
+      assert.match(err.mock.calls[0].arguments[0], /decision log failed: Error: disk full/);
+      assert.equal((await rec(call)).record.rows.filter((x) => x.origin === 'simulated').length, 5, 'the events were still kept');
+    }, { mode: mockMode(), runLog: createRunLog({ write: () => { throw new Error('disk full'); } }) });
+    err.mock.resetCalls();
+    await withLab(async ({ call }) => { // building the events throws (a run without the claims the mock always returns)
+      const r = await call('POST', '/api/run');
+      assert.equal(r.status, 200);
+      assert.match(err.mock.calls[0].arguments[0], /decision log failed: TypeError/);
+    }, { mode: mockMode(), world: { state: { runs: [] }, reset() {}, revokeAgent() {}, run: async () => ({ ok: true, inbound: {}, actor: {}, downstream: {} }) } });
+    err.mock.resetCalls();
+    await withLab(async ({ call }) => { // Real: the callback is guarded too
+      assert.equal((await call('POST', '/api/run')).status, 200);
+      assert.equal(err.mock.callCount(), 4);
+    }, { runLog: createRunLog({ write: () => { throw new Error('disk full'); } }) });
+  } finally { err.mock.restore(); }
 });

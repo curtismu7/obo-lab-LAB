@@ -23,13 +23,22 @@ export const NO_REAL = 'Real mode is not configured. Set PINGONE_ENVIRONMENT_ID,
 
 const form = (obj) => new URLSearchParams(obj).toString();
 const decode = (t) => { try { return JSON.parse(Buffer.from(t.split('.')[1], 'base64url').toString('utf8')); } catch { return null; } };
+// What the downstream's body says, never the body itself: did it parse as a JSON object, and does it carry an error (a top-level error,
+// an isError flag or a JSON-RPC result flagged isError)? A 200 with an error body is not an accepted call.
+const replyShape = (b) => (b && typeof b === 'object' && !Array.isArray(b)
+  ? { parsed: true, bodyError: (b.error !== undefined && b.error !== null) || b.isError === true || b.result?.isError === true }
+  : { parsed: false, bodyError: false });
 
-// `onAnswer` (optional) is told what PingOne or the downstream answered, step by step: the status, the OAuth error code and the decoded
-// claims of a token the lab received. Never a token body, never the error text. The run-observability record is built from these.
+// `onAnswer` (optional) is told what PingOne or the downstream answered, step by step: the status (null when the call did not complete),
+// the OAuth error code, the decoded claims of a token the lab received and, for the downstream, whether the answer was redirected and what
+// shape its body had. Never a token body, never the error text. The run-observability record is built from these.
 async function tokenEndpoint(envId, body, key, { fetchFn = fetch, onAnswer, step } = {}) {
-  const r = await fetchFn(`https://auth.pingone.com/${envId}/as/token`, {
-    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: `Basic ${Buffer.from(key).toString('base64')}` }, body: form(body),
-  });
+  let r;
+  try {
+    r = await fetchFn(`https://auth.pingone.com/${envId}/as/token`, {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: `Basic ${Buffer.from(key).toString('base64')}` }, body: form(body),
+    });
+  } catch (e) { onAnswer?.({ step, status: null }); throw e; }
   const j = await r.json().catch(() => ({}));
   onAnswer?.({ step, status: r.status, error: j.error, claims: r.ok ? decode(j.access_token) : null });
   if (!r.ok) throw new Error(`PingOne token endpoint answered HTTP ${r.status}: ${j.error ?? ''} ${j.error_description ?? ''}`.trim());
@@ -58,7 +67,13 @@ export async function realRun({ fetchFn = fetch, env = process.env, onAnswer } =
     audience, scope,
   }, key, { fetchFn, onAnswer, step: 'exchange' });
   // step 5/6: the downstream accepts the delegated and refuses the person's own
-  const call = async (token, step) => { const r = await fetchFn(downstream, { headers: { authorization: `Bearer ${token}` } }); onAnswer?.({ step, status: r.status }); return r.status; };
+  const call = async (token, step) => {
+    let r;
+    try { r = await fetchFn(downstream, { headers: { authorization: `Bearer ${token}` } }); } catch (e) { onAnswer?.({ step, status: null }); throw e; }
+    const body = await r.json().catch(() => undefined);
+    onAnswer?.({ step, status: r.status, redirected: r.redirected === true, ...replyShape(body) });
+    return r.status;
+  };
   const delegatedStatus = await call(xchg.access_token, 'downstream-delegated');
   const inboundStatus = await call(personToken, 'downstream-own');
   const d = decode(xchg.access_token) ?? {};
