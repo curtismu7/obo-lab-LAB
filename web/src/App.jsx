@@ -28,6 +28,7 @@ export default function App() {
   const [talk, setTalk] = useState([]);
   useEffect(() => { getTalkTrack().then((t) => setTalk(t.talkTrack ?? [])).catch(() => {}); }, []);
   const [run, setRun] = useState(null);
+  const [attempt, setAttempt] = useState(0); // run attempts since the last mode switch or Reset: the run-observability record is read after each
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [announce, setAnnounce] = useState("");
@@ -57,6 +58,7 @@ export default function App() {
       setRun(r);
       setAnnounce(r.ok ? `Run passed: downstream ${r.downstream.delegatedStatus} for the delegated token, ${r.downstream.inboundStatus} for your own.` : `Run refused at step ${r.failedStep}.`);
     } catch (e) { setError(e.message); }
+    setAttempt((n) => n + 1);
     setBusy(false);
   }, []);
 
@@ -65,7 +67,7 @@ export default function App() {
       const r = await requestModeSwitch(next);
       setInfo(r);
       setAnnounce(r.message ?? `Mode: ${r.source}.`);
-      setRun(null);
+      setRun(null); setAttempt(0);
       const c = await getCatalog(); setCatalog(c); // reload all data after a switch (rule 19)
     } catch (e) { setAnnounce(e.message); }
   }, []);
@@ -110,7 +112,7 @@ export default function App() {
           talkTrack={{ active: talkOpen, onToggle: () => setTalkOpen((v) => !v) }}
           help={{ href: "https://github.com/curtismu7/obo-lab-LAB#readme" }}
           version={info?.version || null}
-          onReset={async () => { await resetServer(); setRun(null); setAnnounce("Reset."); }}
+          onReset={async () => { await resetServer(); setRun(null); setAttempt(0); setAnnounce("Reset."); }}
         >
           <ShelfLink />
           <VerifyMark id="obo-lab" />
@@ -121,7 +123,7 @@ export default function App() {
         <p className="banner" data-testid="banner">{banner}</p>
         <ReturnLink app="obo-lab" />
         {tab === "run"
-          ? <RunTab catalog={catalog} run={run} busy={busy} error={error} onRun={onRun} onRevoke={onRevoke} source={info?.source} />
+          ? <RunTab catalog={catalog} run={run} busy={busy} error={error} onRun={onRun} onRevoke={onRevoke} source={info?.source} attempt={attempt} />
           : <WireTab run={run} />}
       </main>
       <footer><p className="muted small">Delegation, not impersonation: sub stays the person, act names the agent, aud and scope narrow. Tokens are one input to enforcement — the act claim is what the downstream checks.</p></footer>

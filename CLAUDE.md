@@ -25,6 +25,7 @@ Follow the rulebook at `~/Development/STANDALONE-RULES.md`.
 - `server/src/realPingOne.js` — the Real-mode tenant client (owner-configured).
 - `server/src/app.js` — `/api/run`, `/api/decode`, `/api/revoke`, `/api/mode`, `/api/catalog`.
 - `server/src/steps.js` + `talkTrack.js` — the step data; the page and the generated talk track read the same source.
+- `server/src/runObs.js` + vendored `server/src/runObservability.js` — rule 27: the decisions of a run (Mock simulated, Real `response`), the one stdout line each leaves, the record. Reads no logs: core only, no readers file, no `RUN_OBS_*`, no Docker socket. `web/src/run-observability/` and `scripts/run-observability-checkPin.mjs` are vendored: never hand-edit, change the canonical `shared/run-observability/` and re-vendor.
 - `web/src/tabs/RunTab.jsx` — the one screen: run, steps, diff table, revoke.
 
 ## Verify before claiming done

@@ -16,6 +16,13 @@ export const getInfo = () => getJson("/api/info");
 export const requestModeSwitch = (source) => postJson("/api/mode", { source });
 export const resetServer = () => postJson("/api/reset");
 export const runObo = () => postJson("/api/run");
+// Rule 23: a server error answers { error, message }; hand that to the panel instead of a bare "HTTP 500".
+export async function getRunObservability() {
+  const r = await fetch("/api/run-observability");
+  const body = await r.json().catch(() => null);
+  if (!r.ok && !body?.error) throw new Error(`HTTP ${r.status}`);
+  return body;
+}
 export const revokeAgent = () => postJson("/api/revoke");
 export const decodeToken = (token) => postJson("/api/decode", { token });
 export const getTalkTrack = () => getJson("/api/talk");
