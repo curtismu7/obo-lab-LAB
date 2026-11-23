@@ -3,7 +3,7 @@
     "name": "OBO Lab",
     "description": "API collection for OBO Lab: run the on-behalf-of exchange scenario end to end against in-process mock issuer, exchanger and downstream (inbound token, actor claims, delegated token, downstream call, delta and leak analysis), and decode the mock tokens. Everything is a labelled mock; the lab has no live mode.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_postman_id": "d2ca2c20-73ba-409e-a844-fbfd3e5c0d4e"
+    "_postman_id": "postman-obo-lab"
   },
   "item": [
     {
@@ -18,9 +18,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "/* Assertions for this request */",
-                  "pm.response.to.have.status(200);",
-                  "pm.expect(pm.response.json().state).to.eql('ready');"
+                  "pm.test(\"Health\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().state).to.eql('ready');",
+                  "});"
                 ]
               }
             }
@@ -50,8 +51,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "/* Assertions for this request */",
-                  "pm.response.to.have.status(200);"
+                  "pm.test(\"Info\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
                 ]
               }
             }
@@ -81,9 +83,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "/* Assertions for this request */",
-                  "pm.response.to.have.status(200);",
-                  "pm.expect(pm.response.json()).to.have.property('persona');"
+                  "pm.test(\"Scenario catalog\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json()).to.have.property('persona');",
+                  "});"
                 ]
               }
             }
@@ -112,6 +115,38 @@
       "description": "One run produces the whole story: inbound token, actor, delegated token, downstream call, the claim delta and the leak analysis. Decode inspects a pasted token; revoke clears state.",
       "item": [
         {
+          "name": "Reset state (re-runnable)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Reset state (re-runnable)\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{LAB_BASE}}/api/reset",
+              "host": [
+                "{{LAB_BASE}}"
+              ],
+              "path": [
+                "api",
+                "reset"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        },
+        {
           "name": "Run the exchange",
           "event": [
             {
@@ -119,10 +154,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "/* Assertions for this request */",
-                  "pm.response.to.have.status(200);",
-                  "pm.expect(pm.response.json().ok).to.eql(true);",
-                  "pm.expect(pm.response.json()).to.have.property('delegated');"
+                  "pm.test(\"Run the exchange\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().ok).to.eql(true);",
+                  "  pm.expect(pm.response.json()).to.have.property('delegated');",
+                  "});"
                 ]
               }
             }
@@ -161,8 +197,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "/* Assertions for this request */",
-                  "pm.expect(pm.response.code).to.eql(400);"
+                  "pm.test(\"Decode a non-JWT (negative)\", function () {",
+                  "  pm.expect(pm.response.code).to.eql(400);",
+                  "});"
                 ]
               }
             }
@@ -201,8 +238,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "/* Assertions for this request */",
-                  "pm.response.to.have.status(200);"
+                  "pm.test(\"Revoke / clear state\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
                 ]
               }
             }
