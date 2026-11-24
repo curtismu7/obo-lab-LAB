@@ -106,6 +106,7 @@ export default function App() {
           {TABS.map(([id, label]) => <a key={id} href={`#/${id}`} aria-current={tab === id ? "page" : undefined}>{label}</a>)}
         </nav>
         <TopMenu
+          postman={{ repo: "curtismu7/obo-lab-LAB", slug: "obo-lab" }}
           mode={{ value: info?.source === "real" ? "real" : "mock", onChange: onMode, realAvailable: info ? info.realAvailable === true : null, realHint: info && info.realAvailable !== true ? info.realReason : undefined }}
           theme={{ value: theme === "system" ? "auto" : theme, onChange: (v) => { setTheme(v === "auto" ? "system" : v); write("obol.theme", v === "auto" ? "system" : v); } }}
           present={{ active: present, onToggle: () => setPresent((v) => { write("obol.present", v ? "0" : "1"); return !v; }) }}
