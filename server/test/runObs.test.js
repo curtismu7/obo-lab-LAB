@@ -108,6 +108,33 @@ test('mock: a revoked agent is a refusal at step 2; the person and resource laye
   }, { mode: mockMode() });
 });
 
+test('the chain: one chain per run whose user, agent and scope steps come from the run itself, with the lab-minted correlation id on every row', async () => {
+  await withLab(async ({ call }) => {
+    assert.equal((await call('POST', '/api/run')).status, 200);
+    const { record: r } = await rec(call);
+    assert.deepEqual(assertRunObservability(r), []);
+    assert.ok(Array.isArray(r.chain?.chains) && r.chain.chains.length === 1, 'one chain (one agent)');
+    const c = r.chain.chains[0];
+    assert.equal(c.agent.value, 'personal-agent', 'the agent step names the cast agent');
+    assert.equal(c.user.value, 'user.0042', 'the user step names the person the run acted for');
+    assert.deepEqual(c.scopes.values, ['checking:read', 'transfer:write'], 'the scopes step shows the delegated token scope claim');
+    assert.deepEqual(c.policies, [], 'no policy step: this lab has no Privilege or P1AZ hop, and none is invented');
+    assert.deepEqual(c.links, { userAgent: true, agentScopes: true, scopesPolicy: false });
+    for (const row of r.rows.filter((x) => x.origin !== 'not-logged')) {
+      assert.equal(row.detail.correlationId, r.runId, 'every row carries the lab-minted run correlation id');
+      assert.ok(!/eyJ|Bearer/.test(JSON.stringify(row.detail)), 'no token material in any detail');
+    }
+  }, { mode: mockMode() });
+  await withLab(async ({ call }) => {
+    assert.equal((await call('POST', '/api/run')).status, 200);
+    const { record: r } = await rec(call);
+    assert.deepEqual(assertRunObservability(r), []);
+    const c = r.chain.chains[0];
+    assert.ok(c.agent.value.length < 20 && c.agent.value.includes('…'), `the real act client id is declared via correlation and kept, shortened: ${c.agent.value}`);
+    assert.deepEqual(c.scopes.values, ['checking:read', 'transfer:write'], 'the scopes come from the delegated token PingOne minted');
+  });
+});
+
 test('empty before a run; a second run replaces the first; workspaces and Reset keep runs apart', async () => {
   await withLab(async ({ call }) => {
     assert.deepEqual((await call('GET', '/api/run-observability')).body, { record: null, message: 'No run yet in Mock mode in this workspace: run the demo.' });

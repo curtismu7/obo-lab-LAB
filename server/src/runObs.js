@@ -40,12 +40,18 @@ export function mockEvents(run, agent) {
     return out;
   }
   const d = run.delegated.claims;
+  const personSub = nameOf(run.inbound.claims.sub);
+  const delegatedAct = actOf(d.act);
+  const delegatedScope = typeof d.scope === 'string' ? d.scope.split(/[\s]+/).filter(Boolean) : null;
   out.push({ layer: 'person', step: 'person', actor: idOf(run.inbound.claims.sub), outcome: 'allowed', product: 'lab mock issuer',
-    message: `The mock issuer signed the person's access token: sub ${nameOf(run.inbound.claims.sub)}, client ${nameOf(run.inbound.claims.client_id)}`, detail: { sub: nameOf(run.inbound.claims.sub) } });
+    message: `The mock issuer signed the person's access token: sub ${personSub}, client ${nameOf(run.inbound.claims.client_id)}`,
+    detail: { sub: personSub, user: personSub, agent: delegatedAct === 'none' ? null : delegatedAct } });
   out.push({ layer: 'agent', step: 'agent-identity', actor: agent, outcome: 'allowed', product: 'lab mock issuer',
     message: `The mock issuer gave the agent its own identity (client credentials): ${nameOf(run.actor.claims.sub)}`, detail: { agent: nameOf(run.actor.claims.sub) } });
   out.push({ layer: 'agent', step: 'exchange', actor: agent, outcome: 'allowed', product: 'lab mock exchanger',
-    message: `RFC 8693 exchange: one delegated token minted, sub ${nameOf(d.sub)}, act ${actOf(d.act)}`, detail: { sub: nameOf(d.sub), act: actOf(d.act), scope: typeof d.scope === 'string' ? text(d.scope, 200) : null } });
+    message: `RFC 8693 exchange: one delegated token minted, sub ${nameOf(d.sub)}, act ${delegatedAct}`,
+    detail: { sub: nameOf(d.sub), act: delegatedAct, scope: typeof d.scope === 'string' ? text(d.scope, 200) : null,
+      user: nameOf(d.sub), agent: delegatedAct === 'none' ? null : delegatedAct, ...(delegatedScope ? { scopes: delegatedScope } : {}) } });
   const { delegatedStatus, delegatedWhy, inboundStatus, inboundWhy } = run.downstream;
   out.push({ layer: 'resource', step: 'downstream-delegated', actor: agent, outcome: replyOutcome(delegatedStatus), product: 'lab mock downstream',
     message: `The mock downstream answered HTTP ${text(delegatedStatus, 4)} to the delegated token: ${text(delegatedWhy)}`, detail: { status: delegatedStatus } });
@@ -94,9 +100,12 @@ export function realEvent(a) {
   }
   if (a.step === 'downstream-own' && outcome === 'allowed') message += EXPECTED_REFUSED;
   const sub = idOf(claims?.sub); const act = idOf(claims?.act?.sub);
+  const scopeList = claims && typeof claims.scope === 'string' ? claims.scope.split(/\s+/).filter(Boolean) : null;
   return { layer: s.layer, step: a.step, actor: act, outcome, product: s.product, message: `${message} ${NOT_A_LOG}`,
     detail: { status: a.status, ...(a.step === 'downstream-own' ? { expected: 'refused' } : {}),
-      ...(claims ? { sub: nameOf(claims.sub), act: actOf(claims.act), scope: typeof claims.scope === 'string' ? text(claims.scope, 200) : null } : {}) },
+      ...(claims ? { sub: nameOf(claims.sub), act: actOf(claims.act), scope: typeof claims.scope === 'string' ? text(claims.scope, 200) : null,
+        // Chain keys (SPEC-chain-view): only what the token PingOne minted carries. The exchange row is the agent step: its act sub is the agent.
+        ...(a.step === 'exchange' ? { user: nameOf(claims.sub), agent: idOf(claims?.act?.sub) ?? null, ...(scopeList ? { scopes: scopeList } : {}) } : {}) } : {}) },
     who: sub || act ? { sub, actor: act } : undefined };
 }
 
@@ -124,7 +133,9 @@ export function createRunLog({ write = (line) => process.stdout.write(`${line}\n
         run,
         record(e) {
           const at = new Date(clock()).toISOString();
-          const event = { ...e, at };
+          // The lab-minted correlation id: this run's own id on every row, so the chain joins by it. It is lab-supplied,
+          // not a Ping product id — no Ping product emits one we can read today.
+          const event = { ...e, detail: { ...(e.detail ?? {}), correlationId: run.id }, at };
           run.events.push(event);
           write(`${at} ${SERVICE} decision step=${lineValue(e.step)} actor=${lineValue(e.actor)} result=${e.result || RESULT[e.outcome]} run=${lineValue(run.id)} mode=${source}`);
           return event;
